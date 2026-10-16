@@ -1,4 +1,5 @@
 from types import SimpleNamespace
+from typing import Any
 
 import pytest
 import stripe
@@ -34,7 +35,7 @@ def test_redact_hides_every_secret_but_keeps_its_type():
     assert redact(text) == "keys sk_live_…, rk_test_… and whsec_…; ids cus_123 and sub_456 stay"
 
 
-def client_raising(error: Exception | None):
+def client_raising(error: Exception | None) -> Any:
     def list_clocks(_params):
         if error:
             raise error

@@ -1,6 +1,7 @@
 import os
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
+from typing import Any
 
 import pytest
 import stripe
@@ -60,7 +61,7 @@ def event(event_id, event_type, created, **obj):
     return SimpleNamespace(id=event_id, type=event_type, created=created, data=data)
 
 
-def fake_client(clocks=None, **services):
+def fake_client(clocks=None, **services) -> Any:
     v1 = SimpleNamespace(
         test_helpers=SimpleNamespace(test_clocks=clocks or FakeClocks()),
         customers=Recorder(create=lambda params: SimpleNamespace(id="cus_1", **params)),
@@ -84,7 +85,7 @@ def test_a_run_creates_a_tagged_customer_on_its_own_clock_and_deletes_the_clock(
     with StripeRun(fake_client(clocks), "renewal") as run:
         assert run.customer.test_clock == run.clock.id
         assert run.customer.metadata == {"billing_e2e_run": run.tag}
-        assert run.tag in run.clock.name
+        assert run.clock.name == f"billing-e2e renewal {run.tag}"
     assert clocks.clocks == {}
 
 

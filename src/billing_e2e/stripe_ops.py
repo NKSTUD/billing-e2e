@@ -3,8 +3,10 @@
 import time
 import uuid
 from datetime import datetime, timezone
+from typing import cast
 
 import stripe
+from stripe.params import EventListParams, SubscriptionCreateParams
 
 from billing_e2e.checks import wait_until
 
@@ -34,8 +36,8 @@ class StripeRun:
         self.client = client
         self.name = name
         self.tag = uuid.uuid4().hex[:8]  # marks every object of this run
-        self.clock: stripe.test_helpers.TestClock | None = None
-        self.customer: stripe.Customer | None = None
+        self._clock: stripe.test_helpers.TestClock | None = None
+        self._customer: stripe.Customer | None = None
         self.subscription_id: str | None = None
         self.started_at = 0  # real time: events are dated with it, not with the clock
         self.seen_events: set[str] = set()
@@ -49,10 +51,10 @@ class StripeRun:
 
     def start(self) -> None:
         self.started_at = int(time.time()) - 5  # margin for a clock slightly ahead of Stripe's
-        self.clock = clock = self.client.v1.test_helpers.test_clocks.create(
+        self._clock = clock = self.client.v1.test_helpers.test_clocks.create(
             {"frozen_time": int(time.time()), "name": f"billing-e2e {self.name} {self.tag}"}
         )
-        self.customer = self.client.v1.customers.create(
+        self._customer = self.client.v1.customers.create(
             {
                 "test_clock": clock.id,
                 "email": f"billing-e2e+{self.tag}@example.com",
@@ -62,21 +64,33 @@ class StripeRun:
         )
 
     @property
+    def clock(self) -> stripe.test_helpers.TestClock:
+        if self._clock is None:
+            raise RuntimeError("The run has not started (or was cleaned up)")
+        return self._clock
+
+    @property
+    def customer(self) -> stripe.Customer:
+        if self._customer is None:
+            raise RuntimeError("The run has not started (or was cleaned up)")
+        return self._customer
+
+    @property
     def now(self) -> datetime:
         """The simulated time of this run."""
-        return datetime.fromtimestamp(self._clock().frozen_time, tz=timezone.utc)
+        return datetime.fromtimestamp(self.clock.frozen_time, tz=timezone.utc)
 
     def advance(self, to: datetime) -> None:
         """Move simulated time forward to `to`, and return once Stripe has processed everything due until then
         (renewals, invoices, payment attempts)."""
-        clock = self._clock()
+        clock = self.clock
         target = int(to.timestamp())
         if target <= clock.frozen_time:
             raise ValueError(f"Cannot go back in time: the clock is already at {self.now:%Y-%m-%d %H:%M} UTC")
         self.client.v1.test_helpers.test_clocks.advance(clock.id, {"frozen_time": target})
 
         def ready() -> bool:
-            self.clock = current = self.client.v1.test_helpers.test_clocks.retrieve(clock.id)
+            self._clock = current = self.client.v1.test_helpers.test_clocks.retrieve(clock.id)
             if current.status == "internal_failure":
                 raise RuntimeError("Stripe failed to advance the test clock (status internal_failure)")
             return current.status == "ready"
@@ -90,7 +104,7 @@ class StripeRun:
         than forcing that through the API (which skips what Stripe really does, retries included), move the clock just
         past the moment Stripe planned to finalize the drafts.
         """
-        drafts = self.client.v1.invoices.list({"customer": self._customer().id, "status": "draft", "limit": 100})
+        drafts = self.client.v1.invoices.list({"customer": self.customer.id, "status": "draft", "limit": 100})
         due = [inv.automatically_finalizes_at for inv in drafts.data if inv.automatically_finalizes_at]
         if due:
             self.advance(datetime.fromtimestamp(max(due) + 60, tz=timezone.utc))
@@ -99,7 +113,7 @@ class StripeRun:
         """Give the customer one of Stripe's test cards and make it the default for every invoice."""
         if card not in CARDS:
             raise ValueError(f"Unknown test card {card!r}: use one of {', '.join(CARDS)}")
-        customer = self._customer()
+        customer = self.customer
         method = self.client.v1.payment_methods.attach(CARDS[card], {"customer": customer.id})
         self.client.v1.customers.update(customer.id, {"invoice_settings": {"default_payment_method": method.id}})
 
@@ -108,14 +122,17 @@ class StripeRun:
         parameter (trial, coupon, metadata your application expects…). A payment that fails or needs authentication
         leaves the subscription `incomplete`, as on a real checkout, so a scenario can check it."""
         params = dict(params or {})
-        subscription = self.client.v1.subscriptions.create(
+        # The caller's params are free-form (any Stripe parameter), hence the cast
+        create = cast(
+            SubscriptionCreateParams,
             {
                 **params,
-                "customer": self._customer().id,
+                "customer": self.customer.id,
                 "items": [{"price": self.resolve_price(price)}],
                 "metadata": {**params.get("metadata", {}), "billing_e2e_run": self.tag},
-            }
+            },
         )
+        subscription = self.client.v1.subscriptions.create(create)
         self.subscription_id = subscription.id
         return subscription
 
@@ -140,8 +157,8 @@ class StripeRun:
         Stripe cannot filter events by customer, so this reads the account's recent events and keeps those whose
         object belongs to the run's customer (the customer itself, its subscriptions, invoices, payments…).
         """
-        customer_id = self._customer().id
-        params: dict = {"created": {"gte": self.started_at}, "limit": 100}
+        customer_id = self.customer.id
+        params: EventListParams = {"created": {"gte": self.started_at}, "limit": 100}
         if event_type:
             params["type"] = event_type
         mine = []
@@ -162,22 +179,12 @@ class StripeRun:
         return event
 
     def cleanup(self) -> None:
-        if self.clock is None:
+        if self._clock is None:
             return
         try:
-            self.client.v1.test_helpers.test_clocks.delete(self.clock.id)
+            self.client.v1.test_helpers.test_clocks.delete(self._clock.id)
         except stripe.InvalidRequestError as exc:
             if exc.code != "resource_missing":  # already gone is fine
                 raise
-        self.clock = self.customer = None
+        self._clock = self._customer = None
         self.subscription_id = None
-
-    def _clock(self) -> stripe.test_helpers.TestClock:
-        if self.clock is None:
-            raise RuntimeError("The run has not started (or was cleaned up)")
-        return self.clock
-
-    def _customer(self) -> stripe.Customer:
-        if self.customer is None:
-            raise RuntimeError("The run has not started (or was cleaned up)")
-        return self.customer

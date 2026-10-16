@@ -7,7 +7,7 @@ from typing import TypeVar
 T = TypeVar("T")
 
 
-def wait_until(condition: Callable[[], T], *, what: str, timeout: float, interval: float = 1.0) -> T:
+def wait_until(condition: Callable[[], T | None], *, what: str, timeout: float, interval: float = 1.0) -> T:
     """Call `condition` until it returns something truthy, and return that. Waits on a state, never a fixed delay."""
     deadline = time.monotonic() + timeout
     while True:
