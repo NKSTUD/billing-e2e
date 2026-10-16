@@ -6,7 +6,7 @@ from datetime import datetime, timezone
 from typing import cast
 
 import stripe
-from stripe.params import EventListParams, SubscriptionCreateParams
+from stripe.params import EventListParams, SubscriptionCreateParams, SubscriptionUpdateParams
 
 from billing_e2e.checks import wait_until
 
@@ -62,6 +62,10 @@ class StripeRun:
                 "metadata": {"billing_e2e_run": self.tag},
             }
         )
+
+    @property
+    def started(self) -> bool:
+        return self._clock is not None
 
     @property
     def clock(self) -> stripe.test_helpers.TestClock:
@@ -150,6 +154,35 @@ class StripeRun:
         if self.subscription_id is None:
             raise RuntimeError("No subscription yet: subscribe first")
         return self.client.v1.subscriptions.retrieve(self.subscription_id)
+
+    @property
+    def period_end(self) -> datetime:
+        """End of the subscription's current period (when the next renewal is due)."""
+        return datetime.fromtimestamp(self.subscription["items"].data[0].current_period_end, tz=timezone.utc)
+
+    def change_price(self, price: str, params: dict | None = None) -> stripe.Subscription:
+        """Move the subscription to another price, with proration unless `params` says otherwise
+        (e.g. {"proration_behavior": "always_invoice"} to charge the difference at once)."""
+        subscription = self.subscription
+        update = cast(
+            SubscriptionUpdateParams,
+            {
+                "proration_behavior": "create_prorations",
+                **(params or {}),
+                "items": [{"id": subscription["items"].data[0].id, "price": self.resolve_price(price)}],
+            },
+        )
+        return self.client.v1.subscriptions.update(subscription.id, update)
+
+    def cancel(self, when: str) -> stripe.Subscription:
+        """Cancel the subscription `now`, or at `period_end` (it stays active until then, as from a customer portal)."""
+        if self.subscription_id is None:
+            raise RuntimeError("No subscription yet: subscribe first")
+        if when == "now":
+            return self.client.v1.subscriptions.cancel(self.subscription_id)
+        if when == "period_end":
+            return self.client.v1.subscriptions.update(self.subscription_id, {"cancel_at_period_end": True})
+        raise ValueError("cancel takes now or period_end")
 
     def events(self, event_type: str | None = None) -> list[stripe.Event]:
         """Events about this run's customer since the run started, oldest first.
