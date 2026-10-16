@@ -214,10 +214,21 @@ class StripeRun:
     def cleanup(self) -> None:
         if self._clock is None:
             return
-        try:
-            self.client.v1.test_helpers.test_clocks.delete(self._clock.id)
-        except stripe.InvalidRequestError as exc:
-            if exc.code != "resource_missing":  # already gone is fine
-                raise
+        clock_id = self._clock.id
+
+        def deleted() -> bool:
+            try:
+                self.client.v1.test_helpers.test_clocks.delete(clock_id)
+            except stripe.InvalidRequestError as exc:
+                if exc.code != "resource_missing":  # already gone is fine
+                    raise
+            except stripe.RateLimitError as exc:
+                # Stripe refuses while the clock is still advancing (e.g. after Ctrl+C mid-advance): wait for it
+                if "advancement underway" not in str(exc):
+                    raise
+                return False
+            return True
+
+        wait_until(deleted, what="the test clock to be deleted", timeout=ADVANCE_TIMEOUT, interval=2)
         self._clock = self._customer = None
         self.subscription_id = None
