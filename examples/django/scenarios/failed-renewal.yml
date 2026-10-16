@@ -1,0 +1,14 @@
+name: Failed renewal
+steps:
+  - card: ok
+  - subscribe: "{monthly_price}"
+  - expect_event: invoice.paid
+  - check: {run: python manage.py billing_e2e expect --plan Business}
+  - card: fails_later
+  - advance: period_end
+  - expect_event: invoice.payment_failed
+  - subscription: {status: past_due}
+  - check: {run: python manage.py billing_e2e expect --plan Business}
+  - advance: 1 month
+  - expect_event: customer.subscription.deleted
+  - check: {run: python manage.py billing_e2e expect --plan Free}

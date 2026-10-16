@@ -46,5 +46,6 @@ select = ["E", "W", "F", "I", "B", "UP", "SIM", "RUF"]
 testpaths = ["tests"]
 
 [tool.pyright]
+include = ["src", "tests"]  # examples/ import the frameworks they show
 venvPath = "."
 venv = ".venv"
