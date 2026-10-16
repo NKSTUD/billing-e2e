@@ -31,6 +31,9 @@ app:
   # BILLING_E2E_CUSTOMER_EMAIL and BILLING_E2E_SUBSCRIPTION in their environment.
   # setup: python manage.py billing_e2e_user
   # teardown: python manage.py billing_e2e_cleanup
+  # If your app records a subscription from checkout.session.completed, record the one each scenario creates
+  # through the API (gets BILLING_E2E_SUBSCRIPTION):
+  # after_subscribe: python manage.py billing_e2e_link
 
 # Your values, used as {name} in the scenarios: a price id (price_...) or a lookup key
 vars:

@@ -112,6 +112,9 @@ class Config:
     headers: dict[str, str] = field(default_factory=dict)
     setup: str | None = None
     teardown: str | None = None
+    # Run right after each subscribe step: lets an app that records subscriptions from checkout.session.completed
+    # record one created through the API (it gets BILLING_E2E_SUBSCRIPTION)
+    after_subscribe: str | None = None
     vars: dict[str, str] = field(default_factory=dict)  # project values used as {name} in scenarios (prices…)
 
 
@@ -288,6 +291,7 @@ def parse_config(data: Any, source: str = "config", env: dict[str, str] | None =
         headers={str(k): str(v) for k, v in headers.items()},
         setup=app.get("setup"),
         teardown=app.get("teardown"),
+        after_subscribe=app.get("after_subscribe"),
         vars={str(k): str(v) for k, v in variables.items()},
     )
 

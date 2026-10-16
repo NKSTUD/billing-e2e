@@ -132,6 +132,8 @@ class Runner:
                 return "set as the default payment method"
             case Subscribe(price, params):
                 subscription = run.subscribe(fill(price, variables), fill(params, variables))
+                if self.config.after_subscribe:
+                    self._hook("after_subscribe", self.config.after_subscribe, run)
                 return f"{subscription.id} is {subscription.status}"
             case Advance(to):
                 target = run.period_end if isinstance(to, str) else to.after(run.now)

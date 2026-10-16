@@ -254,3 +254,18 @@ def test_project_vars_fill_the_prices():
     result, _, run = play(Subscribe("{monthly_price}"), ChangePrice("{upgrade_price}"), config=config)
     assert result.passed
     assert run.calls == [("subscribe", "price_m", {}), ("change_price", "price_u", {})]
+
+
+def test_after_subscribe_runs_once_the_subscription_exists():
+    hook = python("import os, sys; sys.exit(os.environ['BILLING_E2E_SUBSCRIPTION'] != 'sub_1')")
+    config = Config(stripe_key="sk_test_x", after_subscribe=hook)
+    result, _, _ = play(Subscribe("price_m"), config=config)
+    assert result.passed
+
+
+def test_a_failing_after_subscribe_fails_the_step():
+    config = Config(stripe_key="sk_test_x", after_subscribe=python("import sys; print('no such plan'); sys.exit(1)"))
+    result, seen, _ = play(Subscribe("price_m"), config=config)
+    assert not result.passed
+    assert seen[0].detail.startswith("after_subscribe failed:")
+    assert seen[0].detail.endswith("exited with 1: no such plan")
