@@ -1,0 +1,17 @@
+name: Failed renewal
+# The card stops working: the renewal fails, the subscription goes past_due, then Stripe's retries run out.
+steps:
+  - card: ok
+  - subscribe: "{monthly_price}"
+  - expect_event: invoice.paid
+  - card: fails_later
+  - advance: period_end
+  - expect_event: invoice.payment_failed
+  - subscription: {status: past_due}
+  # - check: {get: /api/account, expect: {subscription.status: past_due}}
+  # Stripe retries for up to a few weeks, then applies your account's setting (Billing > Revenue recovery):
+  # "cancel the subscription" gives the two steps below; "mark as unpaid" gives status unpaid instead.
+  - advance: 1 month
+  - expect_event: customer.subscription.deleted
+  - subscription: {status: canceled}
+  # - check: {get: /api/account, expect: {plan.name: Free}}

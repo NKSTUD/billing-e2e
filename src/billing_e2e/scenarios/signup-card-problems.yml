@@ -1,0 +1,13 @@
+name: Card problems at signup
+# A declined card is refused; a card needing authentication (3D Secure) that is never confirmed leaves the
+# subscription incomplete, and Stripe expires it after 23 hours. Your app should never grant access here.
+steps:
+  - card: declined
+  - card: 3ds
+  - subscribe: "{monthly_price}"
+  - subscription: {status: incomplete}
+  # - check: {get: /api/account, expect: {plan.name: Free}}
+  - advance: 1 day
+  - expect_event: customer.subscription.updated
+  - subscription: {status: incomplete_expired}
+  # - check: {get: /api/account, expect: {plan.name: Free}}

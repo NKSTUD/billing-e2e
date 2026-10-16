@@ -1,0 +1,15 @@
+name: Cancellation at period end
+# The customer cancels: access stays until the end of the paid period, then the subscription ends.
+steps:
+  - card: ok
+  - subscribe: "{monthly_price}"
+  - expect_event: invoice.paid
+  - advance: 3 days
+  - cancel: period_end
+  - subscription: {status: active, cancel_at_period_end: true}
+  # The customer keeps access until then:
+  # - check: {get: /api/account, expect: {subscription.status: active}}
+  - advance: period_end
+  - expect_event: customer.subscription.deleted
+  - subscription: {status: canceled}
+  # - check: {get: /api/account, expect: {plan.name: Free}}

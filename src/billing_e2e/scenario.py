@@ -112,6 +112,7 @@ class Config:
     headers: dict[str, str] = field(default_factory=dict)
     setup: str | None = None
     teardown: str | None = None
+    vars: dict[str, str] = field(default_factory=dict)  # project values used as {name} in scenarios (prices…)
 
 
 # --- parsing ---------------------------------------------------------------------------------------------------------
@@ -276,15 +277,18 @@ def parse_config(data: Any, source: str = "config", env: dict[str, str] | None =
         raise ScenarioError(f"{source}: stripe: and app: must be mappings")
     if not stripe_part.get("key"):
         raise ScenarioError(f"{source}: stripe.key is required, e.g. key: ${{STRIPE_TEST_KEY}}")
-    headers = app.get("headers") or {}
+    headers, variables = app.get("headers") or {}, data.get("vars") or {}
     if not isinstance(headers, dict):
         raise ScenarioError(f"{source}: app.headers must be a mapping")
+    if not isinstance(variables, dict):
+        raise ScenarioError(f"{source}: vars must be a mapping, e.g. vars: {{monthly_price: price_123}}")
     return Config(
         stripe_key=str(stripe_part["key"]).strip(),
         base_url=app.get("base_url"),
         headers={str(k): str(v) for k, v in headers.items()},
         setup=app.get("setup"),
         teardown=app.get("teardown"),
+        vars={str(k): str(v) for k, v in variables.items()},
     )
 
 

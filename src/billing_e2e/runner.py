@@ -131,7 +131,7 @@ class Runner:
                 run.attach_card(card)
                 return "set as the default payment method"
             case Subscribe(price, params):
-                subscription = run.subscribe(price, fill(params, variables))
+                subscription = run.subscribe(fill(price, variables), fill(params, variables))
                 return f"{subscription.id} is {subscription.status}"
             case Advance(to):
                 target = run.period_end if isinstance(to, str) else to.after(run.now)
@@ -153,7 +153,7 @@ class Runner:
                 env, command = self._env(run), fill(command, variables)
                 return eventually(lambda: command_check(command, env), what=f"`{command}`").detail
             case ChangePrice(price, params):
-                subscription = run.change_price(price, fill(params, variables))
+                subscription = run.change_price(fill(price, variables), fill(params, variables))
                 return f"{subscription.id} is now on {subscription['items'].data[0].price.id}"
             case Cancel(when):
                 subscription = run.cancel(when)
@@ -179,9 +179,9 @@ class Runner:
         if not outcome.passed:
             raise CheckFailed(f"{name} failed: {outcome.detail}")
 
-    @staticmethod
-    def _variables(run: StripeRun) -> dict[str, str]:
-        return {"run": run.tag, "customer": run.customer.id, "subscription": run.subscription_id or ""}
+    def _variables(self, run: StripeRun) -> dict[str, str]:
+        run_values = {"run": run.tag, "customer": run.customer.id, "subscription": run.subscription_id or ""}
+        return {**self.config.vars, **run_values}
 
     def _env(self, run: StripeRun) -> dict[str, str]:
         """What a command of the application gets to know which run it is about."""

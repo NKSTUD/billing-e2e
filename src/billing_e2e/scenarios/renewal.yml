@@ -1,0 +1,12 @@
+name: Renewal
+# The monthly payment goes through and the subscription stays active.
+steps:
+  - card: ok
+  - subscribe: "{monthly_price}"
+  - expect_event: invoice.paid
+  # - check: {get: /api/account, expect: {plan.status: active}}
+  - advance: period_end
+  - expect_event: invoice.paid
+  - subscription: {status: active}
+  # Your app should now show the next billing date one period later:
+  # - check: {get: /api/account, expect: {subscription.status: active}}

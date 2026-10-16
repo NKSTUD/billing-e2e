@@ -28,18 +28,24 @@ def test_init_writes_a_config_and_a_scenario_and_keeps_existing_files(tmp_path, 
     monkeypatch.chdir(tmp_path)
     assert exit_code(["init"]) == 0
     assert "${STRIPE_TEST_KEY}" in (tmp_path / "billing-e2e.yml").read_text()
-    assert "subscribe:" in (tmp_path / "scenarios" / "renewal.yml").read_text()
+    assert '"{monthly_price}"' in (tmp_path / "scenarios" / "renewal.yml").read_text()
     (tmp_path / "billing-e2e.yml").write_text("mine")
     assert exit_code(["init"]) == 0
     assert (tmp_path / "billing-e2e.yml").read_text() == "mine"
     assert "kept billing-e2e.yml" in capsys.readouterr().out
 
 
-def test_the_init_files_are_valid(tmp_path, monkeypatch, capsys):
+def test_init_copies_every_builtin_scenario_and_they_list(tmp_path, monkeypatch, capsys):
     monkeypatch.chdir(tmp_path)
     exit_code(["init"])
+    assert sorted(p.name for p in (tmp_path / "scenarios").iterdir()) == sorted(
+        f.name for f in cli.BUILTIN.iterdir() if f.name.endswith(".yml")
+    )
+    assert "vars:" in (tmp_path / "billing-e2e.yml").read_text()
     assert exit_code(["list"]) == 0
-    assert "Renewal  (6 steps)" in capsys.readouterr().out
+    out = capsys.readouterr().out
+    assert "Renewal  (6 steps)" in out
+    assert "Failed renewal  (10 steps)" in out
 
 
 def write(path, text):

@@ -247,3 +247,10 @@ def test_a_scenario_against_stripe(monkeypatch):
     )
     result = Runner(Config(stripe_key="unused"), client).run(scenario)
     assert result.passed, [(s.label, s.detail) for s in result.steps]
+
+
+def test_project_vars_fill_the_prices():
+    config = Config(stripe_key="sk_test_x", vars={"monthly_price": "price_m", "upgrade_price": "price_u"})
+    result, _, run = play(Subscribe("{monthly_price}"), ChangePrice("{upgrade_price}"), config=config)
+    assert result.passed
+    assert run.calls == [("subscribe", "price_m", {}), ("change_price", "price_u", {})]

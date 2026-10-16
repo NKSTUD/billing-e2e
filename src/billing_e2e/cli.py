@@ -2,6 +2,7 @@
 
 import argparse
 import sys
+from importlib.resources import files
 from pathlib import Path
 
 import stripe
@@ -11,6 +12,8 @@ from billing_e2e.report import Console, write_junit
 from billing_e2e.runner import Runner
 from billing_e2e.safety import UnsafeKeyError, check_key, confirm_test_mode
 from billing_e2e.scenario import Scenario, ScenarioError, load_config, load_scenario
+
+BUILTIN = files("billing_e2e") / "scenarios"
 
 # Exit codes: 0 all passed, 1 a scenario failed, 2 the run could not start, 130 interrupted
 FAILED, UNUSABLE, INTERRUPTED = 1, 2, 130
@@ -28,20 +31,11 @@ app:
   # BILLING_E2E_CUSTOMER_EMAIL and BILLING_E2E_SUBSCRIPTION in their environment.
   # setup: python manage.py billing_e2e_user
   # teardown: python manage.py billing_e2e_cleanup
-"""
 
-SCENARIO_TEMPLATE = """\
-name: Renewal
-steps:
-  - card: ok
-  - subscribe: your_monthly_price    # a price id (price_...) or a lookup key
-  - expect_event: invoice.paid
-  - advance: period_end
-  - expect_event: invoice.paid
-  - subscription: {status: active}
-  # - check:
-  #     get: /api/account
-  #     expect: {plan.name: Business}
+# Your values, used as {name} in the scenarios: a price id (price_...) or a lookup key
+vars:
+  monthly_price: price_your_monthly_plan
+  upgrade_price: price_a_more_expensive_monthly_plan
 """
 
 
@@ -107,7 +101,11 @@ def list_scenarios(args: argparse.Namespace) -> int:
 
 
 def init(args: argparse.Namespace) -> int:
-    targets = {Path(args.config): CONFIG_TEMPLATE, Path("scenarios/renewal.yml"): SCENARIO_TEMPLATE}
+    """Write the config and copy the built-in scenarios, to read and adapt. Existing files are kept."""
+    targets = {Path(args.config): CONFIG_TEMPLATE}
+    for scenario in sorted(BUILTIN.iterdir(), key=lambda f: f.name):
+        if scenario.name.endswith(".yml"):
+            targets[Path("scenarios") / scenario.name] = scenario.read_text(encoding="utf-8")
     for path, content in targets.items():
         if path.exists():
             print(f"kept {path} (already there)")
@@ -115,7 +113,7 @@ def init(args: argparse.Namespace) -> int:
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(content, encoding="utf-8")
         print(f"wrote {path}")
-    print("Next: set STRIPE_TEST_KEY, put your price in scenarios/renewal.yml, then run: billing-e2e run")
+    print(f"Next: set STRIPE_TEST_KEY, put your prices under vars: in {args.config}, then run: billing-e2e run")
     return 0
 
 

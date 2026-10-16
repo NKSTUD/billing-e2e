@@ -172,3 +172,30 @@ def test_the_config_needs_a_stripe_key(tmp_path):
     path.write_text("app: {base_url: http://localhost}\n")
     with pytest.raises(ScenarioError, match=re.escape("stripe.key is required")):
         load_config(path)
+
+
+def test_project_vars_are_read_from_the_config_with_env_values():
+    data = {"stripe": {"key": "sk_test_1"}, "vars": {"monthly_price": "${PRICE}", "seats": 3}}
+    config = parse_config(data, "billing-e2e.yml", {"PRICE": "price_123"})
+    assert config.vars == {"monthly_price": "price_123", "seats": "3"}
+
+
+def test_project_vars_must_be_a_mapping():
+    with pytest.raises(ScenarioError, match="vars must be a mapping"):
+        parse_config({"stripe": {"key": "sk_test_1"}, "vars": ["price_123"]}, "billing-e2e.yml", {})
+
+
+def test_every_builtin_scenario_is_valid():
+    from billing_e2e.cli import BUILTIN
+
+    names = sorted(f.name for f in BUILTIN.iterdir() if f.name.endswith(".yml"))
+    assert names == [
+        "cancel-at-period-end.yml",
+        "failed-renewal.yml",
+        "plan-change.yml",
+        "renewal.yml",
+        "signup-card-problems.yml",
+    ]
+    for name in names:
+        scenario = parse_scenario(yaml.safe_load((BUILTIN / name).read_text()), name)
+        assert scenario.steps
