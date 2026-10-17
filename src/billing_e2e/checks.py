@@ -1,6 +1,7 @@
 """Checks on the application under test (an HTTP call or a command), and waiting until a condition holds."""
 
 import json
+import operator
 import os
 import subprocess
 import time
@@ -41,8 +42,9 @@ def wait_until(condition: Callable[[], T | None], *, what: str, timeout: float, 
         time.sleep(interval)
 
 
-def eventually(check: Callable[[], Result], *, what: str, timeout: float = CHECK_TIMEOUT) -> Result:
-    """Retry `check` until it passes. On timeout, fail with what the application last answered."""
+def eventually(check: Callable[[], Result], *, what: str, timeout: float | None = None) -> Result:
+    """Retry `check` until it passes (CHECK_TIMEOUT by default). On timeout, fail with the last answer."""
+    timeout = CHECK_TIMEOUT if timeout is None else timeout
     last = Result(False, "not run")
 
     def passed() -> Result | None:
@@ -54,6 +56,37 @@ def eventually(check: Callable[[], Result], *, what: str, timeout: float = CHECK
         return wait_until(passed, what=what, timeout=timeout)
     except TimeoutError:
         raise CheckFailed(f"{what}: still failing after {timeout:g} s. {last.detail}") from None
+
+
+# Besides equality, an expected value can be {gt: 0}, {lt: 0}, {gte: 100, lte: 200}, {ne: "canceled"}
+OPERATORS = {"gt": operator.gt, "gte": operator.ge, "lt": operator.lt, "lte": operator.le, "ne": operator.ne}
+
+
+def is_comparison(expected: Any) -> bool:
+    return isinstance(expected, dict) and bool(expected) and set(expected) <= set(OPERATORS)
+
+
+def compare(data: Any, expect: Mapping[str, Any]) -> list[str]:
+    """What differs between `data` (decoded JSON) and `expect` ({path: value or comparison}), one line each."""
+    wrong = []
+    for path, expected in expect.items():
+        actual = lookup(data, path)
+        if actual is MISSING:
+            wrong.append(f"{path} is missing")
+        elif is_comparison(expected):
+            failed = [f"{name} {limit!r}" for name, limit in expected.items() if not _holds(name, actual, limit)]
+            if failed:
+                wrong.append(f"{path} is {actual!r}, expected {' and '.join(failed)}")
+        elif actual != expected:
+            wrong.append(f"{path} is {actual!r}, expected {expected!r}")
+    return wrong
+
+
+def _holds(name: str, actual: Any, limit: Any) -> bool:
+    try:
+        return bool(OPERATORS[name](actual, limit))
+    except TypeError:  # e.g. comparing a text with a number
+        return False
 
 
 def lookup(data: Any, path: str) -> Any:
@@ -82,13 +115,7 @@ def http_check(
         data = response.json()
     except json.JSONDecodeError:
         return Result(False, f"{method} {url} did not answer JSON: {redact(response.text[:300])}")
-    wrong = []
-    for path, expected in expect.items():
-        actual = lookup(data, path)
-        if actual is MISSING:
-            wrong.append(f"{path} is missing")
-        elif actual != expected:
-            wrong.append(f"{path} is {actual!r}, expected {expected!r}")
+    wrong = compare(data, expect)
     return Result(not wrong, "; ".join(wrong) or "all fields match")
 
 
@@ -97,13 +124,14 @@ def command_check(command: str, env: Mapping[str, str] | None = None, timeout: f
 
     `env` is added to the environment, e.g. BILLING_E2E_CUSTOMER, so the command knows which run to look at.
     """
+    shown = redact(command)  # a key written in the command must not reach the report
     try:
         done = subprocess.run(
             command, shell=True, capture_output=True, text=True, timeout=timeout, env={**os.environ, **(env or {})}
         )
     except subprocess.TimeoutExpired:
-        return Result(False, f"`{command}` did not finish within {timeout:g} s")
+        return Result(False, f"`{shown}` did not finish within {timeout:g} s")
     output = redact((done.stdout + done.stderr).strip()[-500:])
     if done.returncode:
-        return Result(False, f"`{command}` exited with {done.returncode}" + (f": {output}" if output else ""))
+        return Result(False, f"`{shown}` exited with {done.returncode}" + (f": {output}" if output else ""))
     return Result(True, output or "exited with 0")

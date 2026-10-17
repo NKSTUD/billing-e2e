@@ -74,6 +74,16 @@ class SubscriptionIs:
 
 
 @dataclass(frozen=True)
+class InvoiceIs:
+    expect: dict  # fields of the subscription's latest invoice
+
+
+@dataclass(frozen=True)
+class CustomerIs:
+    expect: dict  # fields of the customer (balance < 0 is a credit)
+
+
+@dataclass(frozen=True)
 class HttpCheck:
     method: str
     path: str
@@ -96,7 +106,19 @@ class Cancel:
     when: str  # now, period_end
 
 
-Step = Card | Subscribe | Advance | ExpectEvent | SubscriptionIs | HttpCheck | CommandCheck | ChangePrice | Cancel
+Step = (
+    Card
+    | Subscribe
+    | Advance
+    | ExpectEvent
+    | SubscriptionIs
+    | InvoiceIs
+    | CustomerIs
+    | HttpCheck
+    | CommandCheck
+    | ChangePrice
+    | Cancel
+)
 
 
 @dataclass(frozen=True)
@@ -167,6 +189,16 @@ def _subscription(step: dict) -> SubscriptionIs:
     return SubscriptionIs(_mapping(step["subscription"], "subscription"))
 
 
+def _invoice(step: dict) -> InvoiceIs:
+    _only(step, {"invoice"})
+    return InvoiceIs(_mapping(step["invoice"], "invoice"))
+
+
+def _customer(step: dict) -> CustomerIs:
+    _only(step, {"customer"})
+    return CustomerIs(_mapping(step["customer"], "customer"))
+
+
 def _check(step: dict) -> HttpCheck | CommandCheck:
     _only(step, {"check"})
     check = _mapping(step["check"], "check")
@@ -199,6 +231,8 @@ STEPS = {
     "advance": _advance,
     "expect_event": _expect_event,
     "subscription": _subscription,
+    "invoice": _invoice,
+    "customer": _customer,
     "check": _check,
     "change_price": _change_price,
     "cancel": _cancel,

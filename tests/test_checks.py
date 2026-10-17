@@ -3,7 +3,17 @@ import sys
 import httpx
 import pytest
 
-from billing_e2e.checks import MISSING, CheckFailed, Result, command_check, eventually, http_check, lookup, wait_until
+from billing_e2e.checks import (
+    MISSING,
+    CheckFailed,
+    Result,
+    command_check,
+    compare,
+    eventually,
+    http_check,
+    lookup,
+    wait_until,
+)
 
 
 @pytest.fixture(autouse=True)
@@ -121,3 +131,27 @@ def test_command_check_stops_a_command_that_hangs():
     result = command_check(python("import time; time.sleep(5)"), timeout=0.5)
     assert not result.passed
     assert "did not finish within 0.5 s" in result.detail
+
+
+@pytest.mark.parametrize(
+    ("expect", "wrong"),
+    [
+        ({"amount": {"gt": 0}}, []),
+        ({"amount": {"gte": 9214, "lte": 9214}}, []),
+        ({"amount": {"lt": 0}}, ["amount is 9214, expected lt 0"]),
+        ({"amount": {"gt": 0, "lt": 5000}}, ["amount is 9214, expected lt 5000"]),
+        ({"status": {"ne": "canceled"}}, []),
+        ({"status": {"gt": 3}}, ["status is 'paid', expected gt 3"]),  # text vs number: fails, no crash
+        ({"meta": {"plan": "Pro"}}, []),  # a mapping that is not a comparison is compared as is
+        ({"missing": {"gt": 0}}, ["missing is missing"]),
+    ],
+)
+def test_compare_supports_comparisons(expect, wrong):
+    data = {"amount": 9214, "status": "paid", "meta": {"plan": "Pro"}}
+    assert compare(data, expect) == wrong
+
+
+def test_a_secret_in_a_command_never_appears_in_its_result():
+    result = command_check(python("import sys; sys.exit(1)") + " --key sk_live_51Secret")
+    assert "51Secret" not in result.detail
+    assert "sk_live_…" in result.detail

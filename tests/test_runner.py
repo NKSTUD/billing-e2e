@@ -17,9 +17,11 @@ from billing_e2e.scenario import (
     ChangePrice,
     CommandCheck,
     Config,
+    CustomerIs,
     Duration,
     ExpectEvent,
     HttpCheck,
+    InvoiceIs,
     Scenario,
     Subscribe,
     SubscriptionIs,
@@ -72,12 +74,21 @@ class FakeRun:
 
     @property
     def subscription(self):
-        return SimpleNamespace(to_dict=lambda: {"status": self.status, "metadata": {"run": "a1b2"}})
+        return stripe.Subscription.construct_from(
+            {"id": "sub_1", "status": self.status, "metadata": {"run": "a1b2"}}, "sk_test_x"
+        )
 
     def change_price(self, price, params):
         self.calls.append(("change_price", price, params))
         items = {"object": "list", "data": [{"price": {"id": price}}]}
         return stripe.Subscription.construct_from({"id": "sub_1", "items": items}, "sk_test_x")
+
+    @property
+    def latest_invoice(self):
+        return stripe.Invoice.construct_from({"id": "in_1", "total": -7021, "status": "paid"}, "sk_test_x")
+
+    def fetch_customer(self):
+        return stripe.Customer.construct_from({"id": "cus_1", "balance": -7021}, "sk_test_x")
 
     def cancel(self, when):
         self.calls.append(("cancel", when))
@@ -269,3 +280,21 @@ def test_a_failing_after_subscribe_fails_the_step():
     assert not result.passed
     assert seen[0].detail.startswith("after_subscribe failed:")
     assert seen[0].detail.endswith("exited with 1: no such plan")
+
+
+def test_invoice_and_customer_steps_check_amounts_and_credit():
+    _, seen, _ = play(
+        InvoiceIs({"total": {"lt": 0}, "status": "paid"}),
+        CustomerIs({"balance": {"lt": 0}}),
+        CustomerIs({"balance": {"gte": 0}}),
+    )
+    assert [s.passed for s in seen] == [True, True, False]
+    assert seen[0].label == "latest invoice total lt 0, status = paid"
+    assert seen[0].detail == "in_1 matches"
+    assert "balance is -7021, expected gte 0" in seen[2].detail
+
+
+def test_secrets_in_a_step_never_reach_its_label_or_detail():
+    result, seen, _ = play(CommandCheck(python("import sys; sys.exit(1)") + " sk_live_51Secret"))
+    assert not result.passed
+    assert "51Secret" not in seen[0].label + seen[0].detail

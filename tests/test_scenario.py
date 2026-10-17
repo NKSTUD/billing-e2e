@@ -199,3 +199,13 @@ def test_every_builtin_scenario_is_valid():
     for name in names:
         scenario = parse_scenario(yaml.safe_load((BUILTIN / name).read_text()), name)
         assert scenario.steps
+
+
+def test_invoice_and_customer_steps_parse_with_comparisons():
+    from billing_e2e.scenario import CustomerIs, InvoiceIs
+
+    steps = [{"invoice": {"total": {"lt": 0}}}, {"customer": {"balance": {"lt": 0}}}]
+    assert parse_scenario({"steps": steps}).steps == [
+        InvoiceIs({"total": {"lt": 0}}),
+        CustomerIs({"balance": {"lt": 0}}),
+    ]

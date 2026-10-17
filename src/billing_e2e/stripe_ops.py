@@ -43,7 +43,12 @@ class StripeRun:
         self.seen_events: set[str] = set()
 
     def __enter__(self) -> "StripeRun":
-        self.start()
+        try:
+            self.start()
+        except BaseException:
+            # The clock may exist even if the customer could not be created: __exit__ never runs when __enter__ fails
+            self.cleanup()
+            raise
         return self
 
     def __exit__(self, *_exc) -> None:
@@ -173,6 +178,20 @@ class StripeRun:
             },
         )
         return self.client.v1.subscriptions.update(subscription.id, update)
+
+    @property
+    def latest_invoice(self) -> stripe.Invoice:
+        """The subscription's most recent invoice (a renewal, or the proration invoice of a plan change)."""
+        if self.subscription_id is None:
+            raise RuntimeError("No subscription yet: subscribe first")
+        invoices = self.client.v1.invoices.list({"subscription": self.subscription_id, "limit": 1}).data
+        if not invoices:
+            raise RuntimeError(f"{self.subscription_id} has no invoice yet")
+        return invoices[0]
+
+    def fetch_customer(self) -> stripe.Customer:
+        """The customer as Stripe has it now (balance: negative means credit)."""
+        return self.client.v1.customers.retrieve(self.customer.id)
 
     def cancel(self, when: str) -> stripe.Subscription:
         """Cancel the subscription `now`, or at `period_end` (it stays active until then, as from a customer portal)."""

@@ -8,7 +8,7 @@ from datetime import datetime
 import httpx
 import stripe
 
-from billing_e2e.checks import CheckFailed, Result, command_check, eventually, http_check, lookup
+from billing_e2e.checks import CheckFailed, Result, command_check, compare, eventually, http_check, is_comparison
 from billing_e2e.safety import redact
 from billing_e2e.scenario import (
     Advance,
@@ -17,8 +17,10 @@ from billing_e2e.scenario import (
     ChangePrice,
     CommandCheck,
     Config,
+    CustomerIs,
     ExpectEvent,
     HttpCheck,
+    InvoiceIs,
     Scenario,
     Step,
     Subscribe,
@@ -52,6 +54,17 @@ class RunResult:
         return not self.errors and not self.not_run and all(step.passed for step in self.steps)
 
 
+def fields(expect: dict) -> str:
+    """{status: active, amount_paid: {gt: 0}} as "status = active, amount_paid gt 0"."""
+    parts = []
+    for path, value in expect.items():
+        if is_comparison(value):
+            parts += [f"{path} {name} {limit}" for name, limit in value.items()]
+        else:
+            parts.append(f"{path} = {value}")
+    return ", ".join(parts)
+
+
 def describe(step: Step) -> str:
     """A short label for reports: "advance 1 month", "check GET /api/account"."""
     match step:
@@ -64,7 +77,11 @@ def describe(step: Step) -> str:
         case ExpectEvent(event_type):
             return f"expect event {event_type}"
         case SubscriptionIs(expect):
-            return "subscription " + ", ".join(f"{k} = {v}" for k, v in expect.items())
+            return f"subscription {fields(expect)}"
+        case InvoiceIs(expect):
+            return f"latest invoice {fields(expect)}"
+        case CustomerIs(expect):
+            return f"customer {fields(expect)}"
         case HttpCheck(method, path):
             return f"check {method} {path}"
         case CommandCheck(command):
@@ -115,7 +132,7 @@ class Runner:
         except (CheckFailed, TimeoutError, ValueError, RuntimeError, stripe.StripeError) as exc:
             passed, detail = False, redact(str(exc))
         simulated = run.now if run.started else None
-        return StepResult(describe(step), passed, detail, time.monotonic() - started, simulated)
+        return StepResult(redact(describe(step)), passed, redact(detail), time.monotonic() - started, simulated)
 
     def _play(self, step: Step, run: StripeRun) -> str:
         """Do the step; return what happened, or raise with why it failed."""
@@ -143,7 +160,13 @@ class Runner:
             case ExpectEvent(event_type):
                 return f"received {run.wait_for_event(event_type).id}"
             case SubscriptionIs(expect):
-                return self._check_subscription(run, fill(expect, variables)).detail
+                return self._check_stripe(lambda: run.subscription, fill(expect, variables), "the subscription").detail
+            case InvoiceIs(expect):
+                return self._check_stripe(
+                    lambda: run.latest_invoice, fill(expect, variables), "the latest invoice"
+                ).detail
+            case CustomerIs(expect):
+                return self._check_stripe(run.fetch_customer, fill(expect, variables), "the customer").detail
             case HttpCheck(method, path, expect):
                 if not self.config.base_url:
                     raise CheckFailed("an HTTP check needs app.base_url in the config")
@@ -164,22 +187,19 @@ class Runner:
                 )
         raise TypeError(step)
 
-    def _check_subscription(self, run: StripeRun, expect: dict) -> Result:
+    @staticmethod
+    def _check_stripe(fetch: Callable[[], stripe.StripeObject], expect: dict, what: str) -> Result:
         def check() -> Result:
-            data = run.subscription.to_dict()
-            wrong = [
-                f"{path} is {lookup(data, path)!r}, expected {value!r}"
-                for path, value in expect.items()
-                if lookup(data, path) != value
-            ]
-            return Result(not wrong, "; ".join(wrong) or "matches")
+            obj = fetch()
+            wrong = compare(obj.to_dict(), expect)
+            return Result(not wrong, "; ".join(wrong) or f"{getattr(obj, 'id', what)} matches")
 
-        return eventually(check, what="the Stripe subscription", timeout=STRIPE_CHECK_TIMEOUT)
+        return eventually(check, what=f"{what} on Stripe", timeout=STRIPE_CHECK_TIMEOUT)
 
     def _hook(self, name: str, command: str, run: StripeRun) -> None:
         outcome = command_check(command, self._env(run))
         if not outcome.passed:
-            raise CheckFailed(f"{name} failed: {outcome.detail}")
+            raise CheckFailed(redact(f"{name} failed: {outcome.detail}"))
 
     def _variables(self, run: StripeRun) -> dict[str, str]:
         run_values = {"run": run.tag, "customer": run.customer.id, "subscription": run.subscription_id or ""}

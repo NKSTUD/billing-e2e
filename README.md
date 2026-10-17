@@ -80,7 +80,7 @@ billing-e2e run scenarios/renewal.yml --junit report.xml
 |---|---|
 | `renewal.yml` | the monthly payment goes through and the subscription stays active |
 | `failed-renewal.yml` | the card stops working: renewal fails, `past_due`, retries run out, the subscription ends |
-| `plan-change.yml` | upgrade mid-period (difference charged at once), then downgrade (proration) |
+| `plan-change.yml` | upgrade mid-period: a proration invoice is paid at once; downgrade: the unused time becomes a credit |
 | `cancel-at-period-end.yml` | cancellation keeps access until the end of the paid period |
 | `signup-card-problems.yml` | a declined card, and a 3D Secure payment never confirmed: no access is granted |
 
@@ -122,6 +122,8 @@ steps:
 | `advance: <duration> \| period_end` | moves the clock forward (`3 days`, `2 weeks`, `1 month`…), then lets Stripe finalize and charge the invoices that are due |
 | `expect_event: <type>` | waits for the next event of that type about this customer |
 | `subscription: {field: value}` | checks the subscription on Stripe's side (`status`, `cancel_at_period_end`, `items.data.0.price.id`…) |
+| `invoice: {field: value}` | checks the subscription's latest invoice (`billing_reason`, `status`, `amount_paid`, `total`…) |
+| `customer: {field: value}` | checks the customer (`balance`: negative means credit) |
 | `check: {get: <path>, expect: {...}}` | calls your API (also `post:`) and compares fields of the JSON answer |
 | `check: {run: <command>}` | runs a command of your application; passes when it exits with 0 |
 | `change_price: <price>` (+ `params:`) | moves the subscription to another price, with proration (`proration_behavior: always_invoice` charges the difference at once) |
@@ -145,7 +147,13 @@ Your application handles webhooks a moment after Stripe sends them, so every `ch
     GET /api/account: still failing after 30 s. plan.name is 'Free', expected 'Business'
 ```
 
-Fields are read with dotted paths: `plan.name`, `credits.0.remaining`. Values are compared for equality.
+Fields are read with dotted paths: `plan.name`, `credits.0.remaining`. A value is compared for equality, or with `gt`, `gte`, `lt`, `lte`, `ne`:
+
+```yaml
+- invoice: {billing_reason: subscription_update, status: paid, amount_paid: {gt: 0}}
+- customer: {balance: {lt: 0}}                  # the downgrade left a credit
+- check: {get: /api/account, expect: {credits.0.remaining: {gte: 1}}}
+```
 
 ### Variables
 
@@ -231,7 +239,7 @@ Exit codes: `0` every scenario passed, `1` a scenario failed, `2` the run could 
 - Stripe's test clock rules apply: a clock holds at most three customers (billing-e2e uses one), and one `advance` cannot go further than two billing intervals of the shortest subscription. Split long jumps (`advance: 1 month` twice rather than `2 months` on a monthly plan).
 - Subscriptions are created through the API, not through a Checkout page or a Payment Link; see [Apps that use Stripe Checkout](#apps-that-use-stripe-checkout).
 - One price per subscription for now.
-- `check` compares values for equality only.
+- Amounts are checked against bounds (`amount_paid: {gt: 0}`), not recomputed: Stripe computes the proration to the second, and what an app gets wrong is usually whether proration happens at all.
 
 ## Development
 

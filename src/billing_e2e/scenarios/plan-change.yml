@@ -1,5 +1,6 @@
 name: Plan change with proration
-# Upgrade mid-period (the difference is charged at once), then downgrade (unused time becomes a credit).
+# Upgrade mid-period: only the difference for the time left is charged at once. Downgrade: the unused time becomes
+# a credit on the customer's balance, used by the next invoices.
 steps:
   - card: ok
   - subscribe: "{monthly_price}"
@@ -9,8 +10,14 @@ steps:
     params: {proration_behavior: always_invoice}
   - expect_event: invoice.paid
   - subscription: {status: active, items.data.0.price.id: "{upgrade_price}"}
+  # A proration invoice, paid now; a full-price charge or no proration would fail here
+  - invoice: {billing_reason: subscription_update, status: paid, amount_paid: {gt: 0}}
   # - check: {get: /api/account, expect: {plan.name: Business}}
   - advance: 5 days
   - change_price: "{monthly_price}"
+    params: {proration_behavior: always_invoice}
   - subscription: {status: active, items.data.0.price.id: "{monthly_price}"}
+  # The unused time of the expensive plan comes back as a credit (a negative balance)
+  - invoice: {billing_reason: subscription_update, total: {lt: 0}}
+  - customer: {balance: {lt: 0}}
   # - check: {get: /api/account, expect: {plan.name: Starter}}

@@ -246,3 +246,30 @@ def test_a_failed_renewal_against_stripe(monkeypatch):
         run.settle()
         assert run.subscription.status == "past_due"
         assert run.wait_for_event("invoice.payment_failed").data.object.billing_reason == "subscription_cycle"
+
+
+def test_the_clock_is_deleted_when_the_customer_cannot_be_created():
+    clocks = FakeClocks()
+
+    def refuse(_params):
+        raise stripe.APIConnectionError("Stripe unreachable")
+
+    client = fake_client(clocks, customers=Recorder(create=refuse))
+    with pytest.raises(stripe.APIConnectionError), StripeRun(client, "renewal"):
+        pytest.fail("the scenario must not start")
+    assert clocks.clocks == {}
+
+
+def test_latest_invoice_and_customer_are_read_from_stripe():
+    invoices = Recorder(list=page(SimpleNamespace(id="in_2", total=-7021)))
+    customers = Recorder(
+        create=lambda params: SimpleNamespace(id="cus_1", **params),
+        retrieve=lambda customer_id: SimpleNamespace(id=customer_id, balance=-7021),
+    )
+    with StripeRun(fake_client(invoices=invoices, customers=customers), "renewal") as run:
+        with pytest.raises(RuntimeError, match="subscribe first"):
+            run.latest_invoice  # noqa: B018
+        run.subscription_id = "sub_1"
+        assert run.latest_invoice.id == "in_2"
+        assert run.fetch_customer().balance == -7021
+    assert invoices.calls[-1] == ("list", {"subscription": "sub_1", "limit": 1})
