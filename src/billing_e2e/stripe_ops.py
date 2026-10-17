@@ -59,6 +59,15 @@ def delete_all_clocks(client: stripe.StripeClient) -> list[str]:
     return [clock.name or clock.id for clock in mine]
 
 
+def account_id(client: stripe.StripeClient) -> str | None:
+    """The account the key belongs to, for Dashboard links (without it, a sandbox link opens the default account).
+    None when the key may not read it, e.g. a restricted key."""
+    try:
+        return client.v1.accounts.retrieve_current().id
+    except stripe.StripeError:
+        return None
+
+
 class StripeRun:
     """One isolated run: its own test clock, and a customer attached to it.
 

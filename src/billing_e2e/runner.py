@@ -27,7 +27,7 @@ from billing_e2e.scenario import (
     SubscriptionIs,
     fill,
 )
-from billing_e2e.stripe_ops import StripeRun
+from billing_e2e.stripe_ops import StripeRun, account_id
 
 # Stripe's own state is up to date as soon as a call returns, but a status can take a moment to settle
 STRIPE_CHECK_TIMEOUT = 10
@@ -123,6 +123,8 @@ class Runner:
             finally:
                 if self.keep:
                     result.kept = {"clock": run.clock.id, "customer": run.customer.id}
+                    if account := account_id(self.client):
+                        result.kept["account"] = account
                     if run.subscription_id:
                         result.kept["subscription"] = run.subscription_id
                 elif self.config.teardown:

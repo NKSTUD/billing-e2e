@@ -301,11 +301,12 @@ def test_secrets_in_a_step_never_reach_its_label_or_detail():
     assert "51Secret" not in seen[0].label + seen[0].detail
 
 
-def test_keep_reports_the_ids_and_skips_teardown(tmp_path):
+def test_keep_reports_the_ids_and_skips_teardown(tmp_path, monkeypatch):
+    monkeypatch.setattr(runner_module, "account_id", lambda _client: "acct_9")
     marker = tmp_path / "teardown-ran"
     config = Config(stripe_key="sk_test_x", teardown=python(f"open(r'{marker}', 'w')"))
     runner = Runner(config, client=SimpleNamespace(), keep=True)  # type: ignore[arg-type]
     result = runner.run(Scenario("demo", [Subscribe("price_m")]))
-    assert result.kept == {"clock": "clock_1", "customer": "cus_1", "subscription": "sub_1"}
+    assert result.kept == {"clock": "clock_1", "customer": "cus_1", "account": "acct_9", "subscription": "sub_1"}
     assert FakeRun.instances[0].keep
     assert not marker.exists()

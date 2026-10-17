@@ -35,10 +35,9 @@ class Console:
         if result.not_run:
             print(f"  {self._paint(f'{result.not_run} step(s) not run', '2')}", file=self.out)
         if result.kept:
-            ids = ", ".join(f"{name} {value}" for name, value in result.kept.items())
+            ids = ", ".join(f"{name} {value}" for name, value in result.kept.items() if name != "account")
             print(f"  kept for inspection: {ids}", file=self.out)
-            customer = result.kept["customer"]
-            print(f"  {self._paint(f'https://dashboard.stripe.com/test/customers/{customer}', '2')}", file=self.out)
+            print(f"  {self._paint(dashboard_link(result.kept), '2')}", file=self.out)
 
     def summary(self, results: list[RunResult]) -> None:
         failed = [r.scenario for r in results if not r.passed]
@@ -47,6 +46,12 @@ class Console:
         else:
             line = self._paint(f"{len(results)} scenario(s) passed", "32")
         print(f"\n{line}", file=self.out)
+
+
+def dashboard_link(kept: dict[str, str]) -> str:
+    """The kept customer in the Dashboard. The account in the path makes it open in the right account or sandbox."""
+    account = f"{kept['account']}/" if kept.get("account") else ""
+    return f"https://dashboard.stripe.com/{account}test/customers/{kept['customer']}"
 
 
 def step_line(step: StepResult) -> str:

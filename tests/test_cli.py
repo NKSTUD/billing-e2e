@@ -177,6 +177,14 @@ def test_a_failing_app_clean_is_exit_1(tmp_path, monkeypatch, capsys):
     assert "app.clean failed" in capsys.readouterr().out
 
 
+def test_the_dashboard_link_names_the_account_when_known():
+    kept = {"clock": "clock_1", "customer": "cus_1", "account": "acct_9"}
+    out = io.StringIO()
+    Console(out).outcome(RunResult("Renewal", kept=kept))
+    assert "kept for inspection: clock clock_1, customer cus_1\n" in out.getvalue()
+    assert "https://dashboard.stripe.com/acct_9/test/customers/cus_1" in out.getvalue()
+
+
 def test_the_console_shows_what_was_kept():
     out = io.StringIO()
     Console(out).outcome(RunResult("Renewal", kept={"clock": "clock_1", "customer": "cus_1"}))
