@@ -1,5 +1,5 @@
 """
-billing-e2e hooks for the example app: python billing_e2e_hooks.py setup|link|teardown
+billing-e2e hooks for the example app: python billing_e2e_hooks.py setup|link|teardown|clean
 
 billing-e2e passes the run through the environment. Refuses a live key, and only touches billing-e2e+…@example.com.
 """
@@ -11,6 +11,10 @@ from app import activate_subscription, db, stripe
 
 if not stripe.api_key.startswith(("sk_test_", "rk_test_")):
     sys.exit("Live Stripe key: billing-e2e only runs in test mode")
+if sys.argv[1] == "clean":  # run by `billing-e2e clean`: every test account, kept by --keep runs
+    with db() as connection:
+        deleted = connection.execute("DELETE FROM accounts WHERE email LIKE 'billing-e2e+%@example.com'").rowcount
+    sys.exit(print(f"{deleted} test account(s) deleted"))
 email = os.environ["BILLING_E2E_CUSTOMER_EMAIL"]
 if not (email.startswith("billing-e2e+") and email.endswith("@example.com")):
     sys.exit(f"{email} is not a billing-e2e test user")

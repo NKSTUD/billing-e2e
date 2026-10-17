@@ -7,6 +7,7 @@ Copy to <your_app>/management/commands/billing_e2e.py and adapt the three functi
   link      records the subscription the scenario created, as your Checkout handler would
   expect    checks the plan your app gives the user (exit code 1 otherwise)
   teardown  deletes the test user
+  clean     deletes every billing-e2e test user (run by `billing-e2e clean`, after --keep runs)
 
 billing-e2e passes the run through the environment (BILLING_E2E_CUSTOMER, BILLING_E2E_CUSTOMER_EMAIL,
 BILLING_E2E_SUBSCRIPTION). Refuses a live Stripe key, and only touches billing-e2e+…@example.com users.
@@ -49,12 +50,17 @@ class Command(BaseCommand):
     help = "Links billing-e2e scenarios to this app (setup, link, expect, teardown); Stripe test keys only."
 
     def add_arguments(self, parser):
-        parser.add_argument("action", choices=["setup", "link", "expect", "teardown"])
+        parser.add_argument("action", choices=["setup", "link", "expect", "teardown", "clean"])
         parser.add_argument("--plan", help="expect: the plan the user should have")
 
     def handle(self, *args, **options):
         if not settings.STRIPE_SECRET_KEY.startswith(("sk_test_", "rk_test_")):
             raise CommandError("Live Stripe key: billing-e2e only runs in test mode")
+        if options["action"] == "clean":
+            users = get_user_model().objects
+            test_users = users.filter(email__startswith="billing-e2e+", email__endswith="@example.com")
+            self.stdout.write(f"{test_users.delete()[0]} test object(s) deleted")
+            return
         email = run_value("BILLING_E2E_CUSTOMER_EMAIL")
         if not (email.startswith("billing-e2e+") and email.endswith("@example.com")):
             raise CommandError(f"{email} is not a billing-e2e test user")

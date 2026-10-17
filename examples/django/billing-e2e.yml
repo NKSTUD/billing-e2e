@@ -6,6 +6,7 @@ app:
   setup: python manage.py billing_e2e setup
   after_subscribe: python manage.py billing_e2e link
   teardown: python manage.py billing_e2e teardown
+  clean: python manage.py billing_e2e clean          # run by `billing-e2e clean`
 
 vars:
   monthly_price: price_your_monthly_plan

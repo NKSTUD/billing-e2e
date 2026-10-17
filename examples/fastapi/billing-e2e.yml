@@ -8,6 +8,7 @@ app:
   setup: python billing_e2e_hooks.py setup
   after_subscribe: python billing_e2e_hooks.py link
   teardown: python billing_e2e_hooks.py teardown
+  clean: python billing_e2e_hooks.py clean           # run by `billing-e2e clean`
 
 vars:
   monthly_price: ${PRO_PRICE}        # mapped to "Pro" in the app's PLANS

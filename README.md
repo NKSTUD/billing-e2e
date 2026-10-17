@@ -83,7 +83,7 @@ billing-e2e run scenarios/plan-change.yml --keep
 billing-e2e clean        # deletes every test clock billing-e2e created, and everything attached to it
 ```
 
-`--keep` also skips `teardown`, so your application's test data stays too. `clean` only deletes clocks named `billing-e2e …`, in test mode; it also removes what a killed run left behind.
+`--keep` also skips `teardown`, so your application's test data stays too: `clean` then runs your `app.clean` command to remove it. `clean` only deletes clocks named `billing-e2e …`, in test mode; it also removes what a killed run left behind.
 
 ## Built-in scenarios
 
@@ -188,6 +188,7 @@ app:
   setup: python manage.py billing_e2e setup               # before each scenario
   after_subscribe: python manage.py billing_e2e link      # after each subscribe step
   teardown: python manage.py billing_e2e teardown         # after each scenario, even a failed one
+  clean: python manage.py billing_e2e clean               # by `billing-e2e clean`: test data left by --keep
 
 vars:
   monthly_price: price_1Abc...

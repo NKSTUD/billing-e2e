@@ -137,6 +137,7 @@ class Config:
     # Run right after each subscribe step: lets an app that records subscriptions from checkout.session.completed
     # record one created through the API (it gets BILLING_E2E_SUBSCRIPTION)
     after_subscribe: str | None = None
+    clean: str | None = None  # run by `billing-e2e clean`: removes the app's test data left by --keep runs
     vars: dict[str, str] = field(default_factory=dict)  # project values used as {name} in scenarios (prices…)
 
 
@@ -326,6 +327,7 @@ def parse_config(data: Any, source: str = "config", env: dict[str, str] | None =
         setup=app.get("setup"),
         teardown=app.get("teardown"),
         after_subscribe=app.get("after_subscribe"),
+        clean=app.get("clean"),
         vars={str(k): str(v) for k, v in variables.items()},
     )
 

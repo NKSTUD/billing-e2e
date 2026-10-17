@@ -8,10 +8,11 @@ from pathlib import Path
 import stripe
 
 import billing_e2e
+from billing_e2e.checks import command_check
 from billing_e2e.report import Console, write_junit
 from billing_e2e.runner import Runner
 from billing_e2e.safety import UnsafeKeyError, check_key, confirm_test_mode
-from billing_e2e.scenario import Scenario, ScenarioError, load_config, load_scenario
+from billing_e2e.scenario import Config, Scenario, ScenarioError, load_config, load_scenario
 from billing_e2e.stripe_ops import delete_all_clocks
 
 BUILTIN = files("billing_e2e") / "scenarios"
@@ -35,6 +36,8 @@ app:
   # If your app records a subscription from checkout.session.completed, record the one each scenario creates
   # through the API (gets BILLING_E2E_SUBSCRIPTION):
   # after_subscribe: python manage.py billing_e2e_link
+  # Run by `billing-e2e clean`: delete the app's test data that --keep left behind
+  # clean: python manage.py billing_e2e_clean_all
 
 # Your values, used as {name} in the scenarios: a price id (price_...) or a lookup key
 vars:
@@ -93,9 +96,9 @@ def run(args: argparse.Namespace) -> int:
     return 0 if all(r.passed for r in results) else FAILED
 
 
-def stripe_client(args: argparse.Namespace) -> stripe.StripeClient:
+def stripe_client(args: argparse.Namespace, config: Config | None = None) -> stripe.StripeClient:
     """A client for a test key only, confirmed with Stripe."""
-    config = load_config(args.config)
+    config = config or load_config(args.config)
     check_key(config.stripe_key)
     client = stripe.StripeClient(config.stripe_key, max_network_retries=2)
     confirm_test_mode(client)
@@ -104,7 +107,8 @@ def stripe_client(args: argparse.Namespace) -> stripe.StripeClient:
 
 def clean(args: argparse.Namespace) -> int:
     try:
-        client = stripe_client(args)
+        config = load_config(args.config)
+        client = stripe_client(args, config)
     except (ScenarioError, UnsafeKeyError) as exc:
         print(f"billing-e2e: {exc}", file=sys.stderr)
         return UNUSABLE
@@ -112,7 +116,11 @@ def clean(args: argparse.Namespace) -> int:
     for name in deleted:
         print(f"deleted {name}")
     print(f"{len(deleted)} billing-e2e test clock(s) deleted" if deleted else "no billing-e2e test clock left")
-    return 0
+    if not config.clean:
+        return 0
+    outcome = command_check(config.clean)  # the app's own test data (kept by --keep, or left by a killed run)
+    print(f"app.clean: {outcome.detail}" if outcome.passed else f"billing-e2e: app.clean failed: {outcome.detail}")
+    return 0 if outcome.passed else FAILED
 
 
 def list_scenarios(args: argparse.Namespace) -> int:

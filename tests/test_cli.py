@@ -154,6 +154,29 @@ def test_clean_refuses_a_live_key(tmp_path, monkeypatch, capsys):
     assert "live key" in capsys.readouterr().err
 
 
+def test_clean_also_runs_the_app_clean_command(tmp_path, monkeypatch, capsys):
+    monkeypatch.chdir(tmp_path)
+    marker = tmp_path / "app-cleaned"
+    config = f"stripe: {{key: sk_test_51Abc}}\napp: {{clean: \"python -c \\\"open(r'{marker}', 'w')\\\"\"}}\n"
+    write(tmp_path / "billing-e2e.yml", config)
+    monkeypatch.setattr(cli, "stripe_client", lambda args, config=None: object())
+    monkeypatch.setattr(cli, "delete_all_clocks", lambda client: ["billing-e2e Renewal a1b2"])
+    assert exit_code(["clean"]) == 0
+    assert marker.exists()
+    out = capsys.readouterr().out
+    assert "deleted billing-e2e Renewal a1b2" in out
+    assert "app.clean:" in out
+
+
+def test_a_failing_app_clean_is_exit_1(tmp_path, monkeypatch, capsys):
+    monkeypatch.chdir(tmp_path)
+    write(tmp_path / "billing-e2e.yml", 'stripe: {key: sk_test_51Abc}\napp: {clean: "exit 3"}\n')
+    monkeypatch.setattr(cli, "stripe_client", lambda args, config=None: object())
+    monkeypatch.setattr(cli, "delete_all_clocks", lambda client: [])
+    assert exit_code(["clean"]) == 1
+    assert "app.clean failed" in capsys.readouterr().out
+
+
 def test_the_console_shows_what_was_kept():
     out = io.StringIO()
     Console(out).outcome(RunResult("Renewal", kept={"clock": "clock_1", "customer": "cus_1"}))
