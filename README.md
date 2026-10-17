@@ -194,7 +194,12 @@ Use the hooks to do what your Checkout handler does:
 
 Every later event (`customer.subscription.updated`, `customer.subscription.deleted`, `invoice.*`) reaches your webhook as usual.
 
-A Django example of these commands, checks included, is in [examples/django](examples/django).
+Examples, checks included:
+
+- [examples/fastapi](examples/fastapi): a small FastAPI app you can run as is, checked over HTTP;
+- [examples/django](examples/django): management commands for a Django app, checked through a command.
+
+billing-e2e does not depend on a framework: anything that receives Stripe webhooks and can be checked over HTTP or by a command works (Laravel, Rails, Node…).
 
 ## In CI
 

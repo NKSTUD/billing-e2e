@@ -1,0 +1,14 @@
+name: Failed renewal
+steps:
+  - card: ok
+  - subscribe: "{monthly_price}"
+  - expect_event: invoice.paid
+  - check: {get: "/accounts/{customer}", expect: {plan: Pro, status: active}}
+  - card: fails_later
+  - advance: period_end
+  - expect_event: invoice.payment_failed
+  # Access is kept while Stripe retries
+  - check: {get: "/accounts/{customer}", expect: {plan: Pro, status: past_due}}
+  - advance: 1 month
+  - expect_event: customer.subscription.deleted
+  - check: {get: "/accounts/{customer}", expect: {plan: Free, status: canceled}}

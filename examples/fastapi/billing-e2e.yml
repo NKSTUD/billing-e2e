@@ -1,0 +1,14 @@
+# Run from this folder, with the app running on port 8001 and webhooks forwarded to it:
+#   stripe listen --forward-to localhost:8001/stripe/webhook
+stripe:
+  key: ${STRIPE_SECRET_KEY}
+
+app:
+  base_url: http://localhost:8001
+  setup: python billing_e2e_hooks.py setup
+  after_subscribe: python billing_e2e_hooks.py link
+  teardown: python billing_e2e_hooks.py teardown
+
+vars:
+  monthly_price: ${PRO_PRICE}        # mapped to "Pro" in the app's PLANS
+  upgrade_price: ${BUSINESS_PRICE}   # mapped to "Business"

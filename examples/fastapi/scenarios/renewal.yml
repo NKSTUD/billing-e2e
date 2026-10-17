@@ -1,0 +1,9 @@
+name: Renewal
+steps:
+  - card: ok
+  - subscribe: "{monthly_price}"
+  - expect_event: invoice.paid
+  - check: {get: "/accounts/{customer}", expect: {plan: Pro, status: active}}
+  - advance: period_end
+  - expect_event: invoice.paid
+  - check: {get: "/accounts/{customer}", expect: {plan: Pro, status: active}}

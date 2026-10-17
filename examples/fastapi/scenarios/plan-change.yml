@@ -1,0 +1,11 @@
+name: Plan change
+steps:
+  - card: ok
+  - subscribe: "{monthly_price}"
+  - expect_event: invoice.paid
+  - check: {get: "/accounts/{customer}", expect: {plan: Pro}}
+  - advance: 10 days
+  - change_price: "{upgrade_price}"
+    params: {proration_behavior: always_invoice}
+  - expect_event: invoice.paid
+  - check: {get: "/accounts/{customer}", expect: {plan: Business}}
