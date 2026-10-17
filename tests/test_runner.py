@@ -35,8 +35,9 @@ class FakeRun:
 
     instances: ClassVar[list["FakeRun"]] = []
 
-    def __init__(self, client, name):
-        self.name, self.tag, self.calls = name, "a1b2", []
+    def __init__(self, client, name, keep=False):
+        self.name, self.tag, self.calls, self.keep = name, "a1b2", [], keep
+        self.clock = SimpleNamespace(id="clock_1")
         self.customer = SimpleNamespace(id="cus_1", email="billing-e2e+a1b2@example.com")
         self.subscription_id = None
         self.started, self.now, self.period_end = True, NOW, datetime(2026, 11, 16, tzinfo=timezone.utc)
@@ -298,3 +299,13 @@ def test_secrets_in_a_step_never_reach_its_label_or_detail():
     result, seen, _ = play(CommandCheck(python("import sys; sys.exit(1)") + " sk_live_51Secret"))
     assert not result.passed
     assert "51Secret" not in seen[0].label + seen[0].detail
+
+
+def test_keep_reports_the_ids_and_skips_teardown(tmp_path):
+    marker = tmp_path / "teardown-ran"
+    config = Config(stripe_key="sk_test_x", teardown=python(f"open(r'{marker}', 'w')"))
+    runner = Runner(config, client=SimpleNamespace(), keep=True)  # type: ignore[arg-type]
+    result = runner.run(Scenario("demo", [Subscribe("price_m")]))
+    assert result.kept == {"clock": "clock_1", "customer": "cus_1", "subscription": "sub_1"}
+    assert FakeRun.instances[0].keep
+    assert not marker.exists()

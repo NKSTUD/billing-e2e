@@ -40,7 +40,7 @@ billing-e2e turns each case into a short scenario that runs in a minute, locally
 ## Safety
 
 - **Test mode only.** Live keys (`sk_live_`, `rk_live_`) are refused before anything is sent, and Stripe is asked to confirm the key is a working test key. There is no flag to turn this off.
-- **Nothing touches your existing data.** Every scenario creates its own test clock and customer, tagged `billing-e2e`, and deletes them at the end, including after a failure or Ctrl+C. Deleting a test clock deletes everything attached to it.
+- **Nothing touches your existing data.** Every scenario creates its own test clock and customer, tagged `billing-e2e`, and deletes them at the end, including after a failure or Ctrl+C (unless you ask to keep them with `--keep`). Deleting a test clock deletes everything attached to it.
 - **Nothing leaves your machine.** No telemetry, no server of ours. Keys come from environment variables and never appear in the output or in reports: anything that looks like a Stripe secret is masked (`sk_test_…`).
 - **Every file is checked before the first call to Stripe.** A typo in a scenario stops the run with the file, the step and a suggestion, not halfway through.
 - Small and readable: three dependencies (`stripe`, `httpx`, `pyyaml`).
@@ -71,6 +71,19 @@ billing-e2e run scenarios/renewal.yml --junit report.xml
 ```
 
 `billing-e2e list` checks the scenarios without running them.
+
+### Inspecting a run
+
+Everything a scenario creates is deleted at the end. To look at it in the Stripe Dashboard (the invoices, the proration, the timeline), keep it:
+
+```bash
+billing-e2e run scenarios/plan-change.yml --keep
+#   kept for inspection: clock clock_1…, customer cus_…, subscription sub_…
+#   https://dashboard.stripe.com/test/customers/cus_…
+billing-e2e clean        # deletes every test clock billing-e2e created, and everything attached to it
+```
+
+`--keep` also skips `teardown`, so your application's test data stays too. `clean` only deletes clocks named `billing-e2e …`, in test mode; it also removes what a killed run left behind.
 
 ## Built-in scenarios
 

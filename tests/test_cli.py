@@ -143,3 +143,19 @@ def test_the_junit_report_has_one_case_per_scenario(tmp_path):
     broken_failure = broken.find("failure")
     assert broken_failure is not None
     assert broken_failure.get("message") == "setup failed: `make user` exited with 1"
+
+
+def test_clean_refuses_a_live_key(tmp_path, monkeypatch, capsys):
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("KEY", "sk_live_51Abc")
+    write(tmp_path / "billing-e2e.yml", "stripe: {key: '${KEY}'}\n")
+    monkeypatch.setattr(cli.stripe, "StripeClient", lambda *a, **k: pytest.fail("Stripe was called"))
+    assert exit_code(["clean"]) == 2
+    assert "live key" in capsys.readouterr().err
+
+
+def test_the_console_shows_what_was_kept():
+    out = io.StringIO()
+    Console(out).outcome(RunResult("Renewal", kept={"clock": "clock_1", "customer": "cus_1"}))
+    assert "kept for inspection: clock clock_1, customer cus_1" in out.getvalue()
+    assert "https://dashboard.stripe.com/test/customers/cus_1" in out.getvalue()

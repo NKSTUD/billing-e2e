@@ -1,4 +1,4 @@
-"""Command line: `run` plays scenarios, `list` shows what a run would play, `init` writes a first config."""
+"""Command line: `run` plays scenarios, `list` checks them, `init` writes a config, `clean` deletes kept clocks."""
 
 import argparse
 import sys
@@ -12,6 +12,7 @@ from billing_e2e.report import Console, write_junit
 from billing_e2e.runner import Runner
 from billing_e2e.safety import UnsafeKeyError, check_key, confirm_test_mode
 from billing_e2e.scenario import Scenario, ScenarioError, load_config, load_scenario
+from billing_e2e.stripe_ops import delete_all_clocks
 
 BUILTIN = files("billing_e2e") / "scenarios"
 
@@ -67,15 +68,13 @@ def run(args: argparse.Namespace) -> int:
     try:
         config = load_config(args.config)
         scenarios = load_all(args.paths)
-        check_key(config.stripe_key)
-        client = stripe.StripeClient(config.stripe_key, max_network_retries=2)
-        confirm_test_mode(client)
+        client = stripe_client(args)
     except (ScenarioError, UnsafeKeyError) as exc:
         print(f"billing-e2e: {exc}", file=sys.stderr)
         return UNUSABLE
 
     console, results = Console(), []
-    runner = Runner(config, client)
+    runner = Runner(config, client, keep=args.keep)
     try:
         for scenario in scenarios:
             console.scenario(scenario.name)
@@ -89,7 +88,31 @@ def run(args: argparse.Namespace) -> int:
         if args.junit and results:
             write_junit(results, args.junit)
     console.summary(results)
+    if args.keep:
+        print("Test clocks kept (Stripe Dashboard > Billing > Test clocks). Delete them with: billing-e2e clean")
     return 0 if all(r.passed for r in results) else FAILED
+
+
+def stripe_client(args: argparse.Namespace) -> stripe.StripeClient:
+    """A client for a test key only, confirmed with Stripe."""
+    config = load_config(args.config)
+    check_key(config.stripe_key)
+    client = stripe.StripeClient(config.stripe_key, max_network_retries=2)
+    confirm_test_mode(client)
+    return client
+
+
+def clean(args: argparse.Namespace) -> int:
+    try:
+        client = stripe_client(args)
+    except (ScenarioError, UnsafeKeyError) as exc:
+        print(f"billing-e2e: {exc}", file=sys.stderr)
+        return UNUSABLE
+    deleted = delete_all_clocks(client)
+    for name in deleted:
+        print(f"deleted {name}")
+    print(f"{len(deleted)} billing-e2e test clock(s) deleted" if deleted else "no billing-e2e test clock left")
+    return 0
 
 
 def list_scenarios(args: argparse.Namespace) -> int:
@@ -128,6 +151,12 @@ def main(argv: list[str] | None = None) -> None:
     run_parser = commands.add_parser("run", help="play scenarios on Stripe test clocks")
     run_parser.add_argument("paths", nargs="*", default=["scenarios"], help="scenario files or directories")
     run_parser.add_argument("--junit", metavar="FILE", help="also write a JUnit XML report (for CI)")
+    run_parser.add_argument(
+        "--keep",
+        action="store_true",
+        help="keep each scenario's test clock, customer and subscription to inspect them (no teardown either); "
+        "delete them later with `billing-e2e clean`",
+    )
     run_parser.set_defaults(handler=run)
 
     list_parser = commands.add_parser("list", help="check and list the scenarios, without running them")
@@ -135,6 +164,9 @@ def main(argv: list[str] | None = None) -> None:
     list_parser.set_defaults(handler=list_scenarios)
 
     commands.add_parser("init", help="write a first config and scenario").set_defaults(handler=init)
+    commands.add_parser(
+        "clean", help="delete every test clock billing-e2e created (kept with --keep, or left by a killed run)"
+    ).set_defaults(handler=clean)
 
     args = parser.parse_args(argv)
     sys.exit(args.handler(args))

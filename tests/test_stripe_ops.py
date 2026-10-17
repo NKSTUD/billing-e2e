@@ -35,6 +35,9 @@ class FakeClocks:
     def delete(self, clock_id):
         del self.clocks[clock_id]
 
+    def list(self, _params):
+        return page(*self.clocks.values())
+
 
 class Recorder:
     """Records the calls made to one Stripe service and answers with canned values."""
@@ -273,3 +276,22 @@ def test_latest_invoice_and_customer_are_read_from_stripe():
         assert run.latest_invoice.id == "in_2"
         assert run.fetch_customer().balance == -7021
     assert invoices.calls[-1] == ("list", {"subscription": "sub_1", "limit": 1})
+
+
+def test_keep_leaves_the_clock_for_inspection():
+    clocks = FakeClocks()
+    with StripeRun(fake_client(clocks), "renewal", keep=True) as run:
+        clock_id = run.clock.id
+    assert clock_id in clocks.clocks
+
+
+def test_delete_all_clocks_only_deletes_the_ones_billing_e2e_created():
+    from billing_e2e.stripe_ops import delete_all_clocks
+
+    clocks = FakeClocks()
+    clocks.create({"name": "billing-e2e renewal a1b2", "frozen_time": 0})
+    clocks.create({"name": "my own clock", "frozen_time": 0})
+    clocks.create({"name": None, "frozen_time": 0})
+    deleted = delete_all_clocks(fake_client(clocks))
+    assert deleted == ["billing-e2e renewal a1b2"]
+    assert sorted(str(c.name) for c in clocks.clocks.values()) == ["None", "my own clock"]

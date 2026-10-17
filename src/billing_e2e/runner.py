@@ -48,6 +48,7 @@ class RunResult:
     steps: list[StepResult] = field(default_factory=list)
     not_run: int = 0  # steps left after a failure
     errors: list[str] = field(default_factory=list)  # setup, teardown, anything outside a step
+    kept: dict[str, str] = field(default_factory=dict)  # with keep: ids left for inspection (clock, customer…)
 
     @property
     def passed(self) -> bool:
@@ -94,14 +95,17 @@ def describe(step: Step) -> str:
 
 
 class Runner:
-    def __init__(self, config: Config, client: stripe.StripeClient, http: httpx.Client | None = None):
+    def __init__(
+        self, config: Config, client: stripe.StripeClient, http: httpx.Client | None = None, keep: bool = False
+    ):
         self.config = config
         self.client = client
+        self.keep = keep  # leave Stripe objects and the app's test data (no teardown) for inspection
         self.http = http or httpx.Client(base_url=config.base_url or "", timeout=30)
 
     def run(self, scenario: Scenario, on_step: Callable[[StepResult], None] | None = None) -> RunResult:
         result = RunResult(scenario.name)
-        with StripeRun(self.client, scenario.name) as run:
+        with StripeRun(self.client, scenario.name, keep=self.keep) as run:
             try:
                 if self.config.setup:
                     self._hook("setup", self.config.setup, run)
@@ -117,7 +121,11 @@ class Runner:
                 result.not_run = len(scenario.steps)
                 result.errors.append(str(exc))
             finally:
-                if self.config.teardown:
+                if self.keep:
+                    result.kept = {"clock": run.clock.id, "customer": run.customer.id}
+                    if run.subscription_id:
+                        result.kept["subscription"] = run.subscription_id
+                elif self.config.teardown:
                     try:
                         self._hook("teardown", self.config.teardown, run)
                     except CheckFailed as exc:

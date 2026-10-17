@@ -34,6 +34,11 @@ class Console:
             print(f"  {self._paint('✗', '31')} {error}", file=self.out)
         if result.not_run:
             print(f"  {self._paint(f'{result.not_run} step(s) not run', '2')}", file=self.out)
+        if result.kept:
+            ids = ", ".join(f"{name} {value}" for name, value in result.kept.items())
+            print(f"  kept for inspection: {ids}", file=self.out)
+            customer = result.kept["customer"]
+            print(f"  {self._paint(f'https://dashboard.stripe.com/test/customers/{customer}', '2')}", file=self.out)
 
     def summary(self, results: list[RunResult]) -> None:
         failed = [r.scenario for r in results if not r.passed]

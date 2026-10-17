@@ -25,6 +25,40 @@ CARDS = {
 }
 
 
+CLOCK_PREFIX = "billing-e2e "  # every clock this tool creates is named "billing-e2e <scenario> <tag>"
+
+
+def delete_clock(client: stripe.StripeClient, clock_id: str) -> None:
+    """Delete a test clock and everything attached to it. Waits if Stripe is still advancing it (it refuses to delete
+    a moving clock, e.g. after Ctrl+C mid-advance); a clock already gone is fine."""
+
+    def deleted() -> bool:
+        try:
+            client.v1.test_helpers.test_clocks.delete(clock_id)
+        except stripe.InvalidRequestError as exc:
+            if exc.code != "resource_missing":
+                raise
+        except stripe.RateLimitError as exc:
+            if "advancement underway" not in str(exc):
+                raise
+            return False
+        return True
+
+    wait_until(deleted, what="the test clock to be deleted", timeout=ADVANCE_TIMEOUT, interval=2)
+
+
+def delete_all_clocks(client: stripe.StripeClient) -> list[str]:
+    """Delete every clock billing-e2e created (kept with --keep, or left by a killed run). Returns their names."""
+    mine = [
+        clock
+        for clock in client.v1.test_helpers.test_clocks.list({"limit": 100}).auto_paging_iter()
+        if (clock.name or "").startswith(CLOCK_PREFIX)
+    ]
+    for clock in mine:
+        delete_clock(client, clock.id)
+    return [clock.name or clock.id for clock in mine]
+
+
 class StripeRun:
     """One isolated run: its own test clock, and a customer attached to it.
 
@@ -32,9 +66,10 @@ class StripeRun:
     context manager, even after a failure) leaves the account as it was. Existing objects are never touched.
     """
 
-    def __init__(self, client: stripe.StripeClient, name: str):
+    def __init__(self, client: stripe.StripeClient, name: str, keep: bool = False):
         self.client = client
         self.name = name
+        self.keep = keep  # leave the clock and its objects for inspection (delete later with `billing-e2e clean`)
         self.tag = uuid.uuid4().hex[:8]  # marks every object of this run
         self._clock: stripe.test_helpers.TestClock | None = None
         self._customer: stripe.Customer | None = None
@@ -57,7 +92,7 @@ class StripeRun:
     def start(self) -> None:
         self.started_at = int(time.time()) - 5  # margin for a clock slightly ahead of Stripe's
         self._clock = clock = self.client.v1.test_helpers.test_clocks.create(
-            {"frozen_time": int(time.time()), "name": f"billing-e2e {self.name} {self.tag}"}
+            {"frozen_time": int(time.time()), "name": f"{CLOCK_PREFIX}{self.name} {self.tag}"}
         )
         self._customer = self.client.v1.customers.create(
             {
@@ -231,23 +266,8 @@ class StripeRun:
         return event
 
     def cleanup(self) -> None:
-        if self._clock is None:
+        if self._clock is None or self.keep:
             return
-        clock_id = self._clock.id
-
-        def deleted() -> bool:
-            try:
-                self.client.v1.test_helpers.test_clocks.delete(clock_id)
-            except stripe.InvalidRequestError as exc:
-                if exc.code != "resource_missing":  # already gone is fine
-                    raise
-            except stripe.RateLimitError as exc:
-                # Stripe refuses while the clock is still advancing (e.g. after Ctrl+C mid-advance): wait for it
-                if "advancement underway" not in str(exc):
-                    raise
-                return False
-            return True
-
-        wait_until(deleted, what="the test clock to be deleted", timeout=ADVANCE_TIMEOUT, interval=2)
+        delete_clock(self.client, self._clock.id)
         self._clock = self._customer = None
         self.subscription_id = None
