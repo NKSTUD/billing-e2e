@@ -4,16 +4,6 @@ All notable changes are listed here. The format follows [Keep a Changelog](https
 
 ## [Unreleased]
 
-### Fixed
-
-- A Stripe error while creating or deleting a scenario's clock or customer fails that scenario with a clear message,
-  and the next scenarios still run (it used to stop the whole run with a traceback and no JUnit report).
-- Ctrl+C with `--keep` no longer claims the current scenario's test clock was deleted.
-
-### Changed
-
-- `stripe` is capped below 17: each major version pins a newer Stripe API version, which can move fields.
-
 ## [0.1.0]
 
 ### Added
@@ -33,3 +23,13 @@ All notable changes are listed here. The format follows [Keep a Changelog](https
 - Safety: live and publishable keys refused before any call, test mode confirmed with Stripe, every file checked
   before the first call, Stripe secrets masked in every output.
 - Examples: a runnable FastAPI app checked over HTTP, and Django management commands.
+
+### Fixed
+
+- A Stripe error while creating or deleting a scenario's clock or customer fails that scenario with a clear message,
+  and the next scenarios still run (it used to stop the whole run with a traceback and no JUnit report).
+- Ctrl+C with `--keep` no longer claims the current scenario's test clock was deleted.
+
+### Changed
+
+- `stripe` is capped below 17: each major version pins a newer Stripe API version, which can move fields.
