@@ -24,3 +24,19 @@ jobs:
       - run: uv run ruff format --check .
       - run: uv run pyright
       - run: uv run pytest
+      - run: uv build
+
+  # Real scenarios on a Stripe test account, when the repository has the secrets (forks do not: the tests skip).
+  stripe:
+    runs-on: ubuntu-latest
+    needs: test
+    if: github.event_name == 'push'
+    concurrency: stripe-test-account
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+      - run: uv sync --locked
+      - run: uv run pytest -k "against_stripe" -v
+        env:
+          BILLING_E2E_STRIPE_KEY: ${{ secrets.BILLING_E2E_STRIPE_KEY }}
+          BILLING_E2E_PRICE: ${{ secrets.BILLING_E2E_PRICE }}

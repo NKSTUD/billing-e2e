@@ -1,6 +1,7 @@
 # billing-e2e
 
 [![CI](https://github.com/NKSTUD/billing-e2e/actions/workflows/ci.yml/badge.svg)](https://github.com/NKSTUD/billing-e2e/actions/workflows/ci.yml)
+[![PyPI](https://img.shields.io/pypi/v/billing-e2e.svg)](https://pypi.org/project/billing-e2e/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue.svg)](pyproject.toml)
 
@@ -269,6 +270,10 @@ Tests against a real Stripe test account run when these are set:
 BILLING_E2E_STRIPE_KEY=sk_test_... BILLING_E2E_PRICE=price_... uv run pytest
 ```
 
+## Contributing
+
+Issues and pull requests are welcome, in English or French: see [CONTRIBUTING.md](CONTRIBUTING.md). Changes are listed in [CHANGELOG.md](CHANGELOG.md). Report vulnerabilities privately, as explained in [SECURITY.md](SECURITY.md).
+
 ## License
 
-MIT
+[MIT](LICENSE)

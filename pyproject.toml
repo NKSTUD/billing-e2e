@@ -1,18 +1,24 @@
 [project]
 name = "billing-e2e"
-version = "0.0.1"
-description = "Test your Stripe subscription lifecycle end to end: renewals, failed payments, proration and cancellation in minutes, with test clocks."
+version = "0.1.0"
+description = "End-to-end tests for Stripe subscriptions: renewals, failed payments, proration and cancellations on test clocks, checked against your own app."
 readme = "README.md"
 license = "MIT"
 license-files = ["LICENSE"]
 authors = [{ name = "Nouhan Kourouma" }]
 requires-python = ">=3.10"
-keywords = ["stripe", "billing", "subscriptions", "testing", "test-clocks", "webhooks"]
+keywords = ["stripe", "billing", "subscriptions", "testing", "e2e", "test-clocks", "webhooks", "proration"]
 classifiers = [
-    "Development Status :: 1 - Planning",
+    "Development Status :: 4 - Beta",
+    "Environment :: Console",
     "Intended Audience :: Developers",
     "Operating System :: OS Independent",
     "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Office/Business :: Financial",
     "Topic :: Software Development :: Testing",
 ]
 dependencies = [
@@ -20,6 +26,11 @@ dependencies = [
     "pyyaml>=6.0",
     "stripe>=12.0",
 ]
+
+[project.urls]
+Homepage = "https://github.com/NKSTUD/billing-e2e"
+Issues = "https://github.com/NKSTUD/billing-e2e/issues"
+Changelog = "https://github.com/NKSTUD/billing-e2e/blob/main/CHANGELOG.md"
 
 [project.scripts]
 billing-e2e = "billing_e2e.cli:main"
