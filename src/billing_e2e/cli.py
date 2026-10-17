@@ -85,7 +85,8 @@ def run(args: argparse.Namespace) -> int:
             console.outcome(result)
             results.append(result)
     except KeyboardInterrupt:
-        print("\nbilling-e2e: interrupted; the test clock of the current scenario was deleted", file=sys.stderr)
+        left = "kept: delete it with billing-e2e clean" if args.keep else "deleted"
+        print(f"\nbilling-e2e: interrupted; the test clock of the current scenario was {left}", file=sys.stderr)
         return INTERRUPTED
     finally:
         if args.junit and results:

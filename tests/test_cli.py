@@ -190,3 +190,22 @@ def test_the_console_shows_what_was_kept():
     Console(out).outcome(RunResult("Renewal", kept={"clock": "clock_1", "customer": "cus_1"}))
     assert "kept for inspection: clock clock_1, customer cus_1" in out.getvalue()
     assert "https://dashboard.stripe.com/test/customers/cus_1" in out.getvalue()
+
+
+@pytest.mark.parametrize(("keep", "said"), [([], "was deleted"), (["--keep"], "was kept: delete it with")])
+def test_an_interrupted_run_says_what_became_of_the_clock(tmp_path, monkeypatch, capsys, keep, said):
+    class Interrupted:
+        def __init__(self, *_a, **_k):
+            pass
+
+        def run(self, *_a, **_k):
+            raise KeyboardInterrupt
+
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("KEY", "sk_test_51Abc")
+    write(tmp_path / "billing-e2e.yml", "stripe: {key: '${KEY}'}\n")
+    write(tmp_path / "scenarios" / "a.yml", "steps:\n  - card: ok\n")
+    monkeypatch.setattr(cli, "stripe_client", lambda *_a: object())
+    monkeypatch.setattr(cli, "Runner", Interrupted)
+    assert exit_code(["run", *keep]) == 130
+    assert said in capsys.readouterr().err

@@ -310,3 +310,17 @@ def test_keep_reports_the_ids_and_skips_teardown(tmp_path, monkeypatch):
     assert result.kept == {"clock": "clock_1", "customer": "cus_1", "account": "acct_9", "subscription": "sub_1"}
     assert FakeRun.instances[0].keep
     assert not marker.exists()
+
+
+def test_a_stripe_error_starting_a_scenario_fails_it_without_a_traceback(monkeypatch):
+    class Unreachable(FakeRun):
+        def __enter__(self):
+            raise stripe.APIConnectionError("Network error while creating the clock (sk_test_51Secret)")
+
+    monkeypatch.setattr(runner_module, "StripeRun", Unreachable)
+    runner = Runner(Config(stripe_key="sk_test_x"), client=SimpleNamespace())  # type: ignore[arg-type]
+    result = runner.run(Scenario("demo", [Card("ok"), Subscribe("price_m")]))
+    assert not result.passed
+    assert result.not_run == 2
+    assert result.errors[0].startswith("Stripe: Network error")
+    assert "51Secret" not in result.errors[0]

@@ -105,33 +105,37 @@ class Runner:
 
     def run(self, scenario: Scenario, on_step: Callable[[StepResult], None] | None = None) -> RunResult:
         result = RunResult(scenario.name)
-        with StripeRun(self.client, scenario.name, keep=self.keep) as run:
-            try:
-                if self.config.setup:
-                    self._hook("setup", self.config.setup, run)
-                for number, step in enumerate(scenario.steps):
-                    outcome = self._step(step, run)
-                    result.steps.append(outcome)
-                    if on_step:
-                        on_step(outcome)
-                    if not outcome.passed:
-                        result.not_run = len(scenario.steps) - number - 1
-                        break
-            except CheckFailed as exc:  # setup failed: no step runs
-                result.not_run = len(scenario.steps)
-                result.errors.append(str(exc))
-            finally:
-                if self.keep:
-                    result.kept = {"clock": run.clock.id, "customer": run.customer.id}
-                    if account := account_id(self.client):
-                        result.kept["account"] = account
-                    if run.subscription_id:
-                        result.kept["subscription"] = run.subscription_id
-                elif self.config.teardown:
-                    try:
-                        self._hook("teardown", self.config.teardown, run)
-                    except CheckFailed as exc:
-                        result.errors.append(str(exc))
+        try:
+            with StripeRun(self.client, scenario.name, keep=self.keep) as run:
+                try:
+                    if self.config.setup:
+                        self._hook("setup", self.config.setup, run)
+                    for number, step in enumerate(scenario.steps):
+                        outcome = self._step(step, run)
+                        result.steps.append(outcome)
+                        if on_step:
+                            on_step(outcome)
+                        if not outcome.passed:
+                            result.not_run = len(scenario.steps) - number - 1
+                            break
+                except CheckFailed as exc:  # setup failed: no step runs
+                    result.not_run = len(scenario.steps)
+                    result.errors.append(str(exc))
+                finally:
+                    if self.keep:
+                        result.kept = {"clock": run.clock.id, "customer": run.customer.id}
+                        if account := account_id(self.client):
+                            result.kept["account"] = account
+                        if run.subscription_id:
+                            result.kept["subscription"] = run.subscription_id
+                    elif self.config.teardown:
+                        try:
+                            self._hook("teardown", self.config.teardown, run)
+                        except CheckFailed as exc:
+                            result.errors.append(str(exc))
+        except (stripe.StripeError, TimeoutError) as exc:  # Stripe failed creating or deleting the clock or customer
+            result.not_run = result.not_run or len(scenario.steps) - len(result.steps)
+            result.errors.append(redact(f"Stripe: {exc}"))
         return result
 
     def _step(self, step: Step, run: StripeRun) -> StepResult:

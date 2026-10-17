@@ -24,7 +24,7 @@ classifiers = [
 dependencies = [
     "httpx>=0.28.1",
     "pyyaml>=6.0",
-    "stripe>=12.0",
+    "stripe>=12.0,<17",  # each major pins a newer Stripe API version, which can move fields
 ]
 
 [project.urls]
